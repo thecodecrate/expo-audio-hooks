@@ -198,6 +198,8 @@ This triple check (`isLoadingAudio`, `status.isLoading`, `try/catch`) avoids the
 
 An alternative to improve this is to replace the three checks with just the `try/catch` block alone. The other two are not reliable anyway.
 
+Another alternative would be to use expo's EventEmitter. It seems `expo-av` uses this module to manage it's asynchronous events. We could write an observer to get the current `_loaded` status.
+
 ### Workaround 3: The bug watchdog
 
 The `sound is not loaded` bug makes the play/pause commands to be ignored sometimes. As a solution, I implemented a watchdog. It's a setInterval executed every 500 milliseconds or so.
@@ -213,6 +215,8 @@ This means when a play/pause command is ignored, this watchdog will retry every 
 A better approach for this is to detect the command was ignored (`catch` block) and set a `setTimeout` to retry again in 500ms, but only once. If an exception occurs while retrying, it triggers another try in 500ms and so on.
 
 This is less resource-intensive than always be checking every 500ms.
+
+Alternatively, we could use EventEmitter and write an observer to detect when `_loaded` status becomes true and retry the command (instead of blindly retrying in 500ms).
 
 ## License
 
