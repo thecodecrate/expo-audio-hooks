@@ -1,0 +1,24 @@
+{
+  "name": "expo-audio-hooks",
+  "version": "1.0.0",
+  "description": "React hooks for expo-av audio",
+  "main": "src/useAudio.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/loureirorg/expo-audio-hooks.git"
+  },
+  "keywords": [
+    "expo-av",
+    "hooks",
+    "audio"
+  ],
+  "author": "Daniel Loureiro",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/loureirorg/expo-audio-hooks/issues"
+  },
+  "homepage": "https://github.com/loureirorg/expo-audio-hooks#readme"
+}
