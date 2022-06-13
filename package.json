@@ -1,6 +1,6 @@
 {
   "name": "expo-audio-hooks",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "React hooks for expo-av audio",
   "main": "src/index.js",
   "scripts": {
