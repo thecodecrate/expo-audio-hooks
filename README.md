@@ -4,7 +4,7 @@ React hooks for expo-av audio.
 
 ## Installation
 
-`npm install expo-av expo-audio-hooks`
+`yarn add expo-av expo-audio-hooks`
 
 > `expo-av` is a peer dependency and needs to be installed explicitly
 
@@ -15,32 +15,35 @@ import useAudio from 'expo-audio-hooks';
 
 function App() {
   const { play, pause, isLoadingAudio } = useAudio(
-    {{ uri: 'https://p.scdn.co/mp3-preview/f7a8ab9c5768009b65a30e9162555e8f21046f46?cid=162b7dc01f3a4a2ca32ed3cec83d1e02' }}
+    { uri: 'https://www.bensound.com/bensound-music/bensound-oblivion.mp3' }
   );
 
-  if (isLoadingAudio) return <p>Loading...</p>
+  if (isLoadingAudio) return <Text>Loading...</Text>
 
   return (
-    <div>
-      <button onClick={play}>play</button>
-      <button onClick={pause}>pause</button>
-    </div>
-  )
+    <View>
+      <Text onPress={play}>Play</Text>
+      <Text onPress={pause}>Pause</Text>
+    </View>
+  );
 }
 ```
 
 ## Example - A song player
+
 ```js
+import { useState } from 'react';
+import { StyleSheet, Text, View } from 'react-native';
 import useAudio from 'expo-audio-hooks';
 
-function App() {
+export default function App() {
   const songList = [
     'https://www.bensound.com/bensound-music/bensound-oblivion.mp3',
     'https://www.bensound.com/bensound-music/bensound-shouldacoulda.mp3',
     'https://www.bensound.com/bensound-music/bensound-supercool.mp3',
   ];
   const [songIndex, setSongIndex] = useState(0);
-  const { isLoadingAudio, setIsPlaying } = useAudio({{ uri: songList[songIndex] }});
+  const { isLoadingAudio, isPlaying, setIsPlaying } = useAudio({ uri: songList[songIndex] });
 
   const togglePlay = () => {
     setIsPlaying((value) => !value);
@@ -50,16 +53,26 @@ function App() {
     setSongIndex((index) => (index + 1) % songList.length);
   };
 
-  if (isLoadingAudio) return <p>Loading...</p>
+  if (isLoadingAudio) return <Text>Loading...</Text>
 
   return (
-    <div>
-      <p>Song #{songIndex}</p>
-      <button onClick={togglePlay}>{isPlaying ? 'Pause' : 'Play'}</button>
-      <button onClick={goToNextSong)}>Next Song</button>
-    </div>
-  )
-}
+    <View style={styles.container}>
+      <Text>Song #{songIndex}</Text>
+      <Text onPress={togglePlay}>{isPlaying ? 'Pause' : 'Play'}</Text>
+      <Text onPress={goToNextSong}>Next Song</Text>
+    </View>
+  );
+};
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'space-evenly',
+    flexDirection: 'row',
+  },
+});
 ```
 
 ## API
