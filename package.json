@@ -10,6 +10,10 @@
     "type": "git",
     "url": "git+https://github.com/loureirorg/expo-audio-hooks.git"
   },
+  "peerDependencies": {
+    "expo-av": "^8.0.0",
+    "react": "^16.8.3"
+  },
   "keywords": [
     "expo-av",
     "hooks",
@@ -20,5 +24,15 @@
   "bugs": {
     "url": "https://github.com/loureirorg/expo-audio-hooks/issues"
   },
-  "homepage": "https://github.com/loureirorg/expo-audio-hooks#readme"
+  "homepage": "https://github.com/loureirorg/expo-audio-hooks#readme",
+  "dependencies": {
+    "react-use": "^17.4.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.0.26",
+    "expo": "^47.0.9",
+    "expo-av": "^13.0.2",
+    "react": "^18.2.0",
+    "typescript": "^4.9.4"
+  }
 }

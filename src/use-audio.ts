@@ -1,25 +1,84 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Audio } from 'expo-av';
+import {
+  Dispatch,
+  SetStateAction,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import { Audio, AVPlaybackStatus, AVMetadata } from 'expo-av';
+import useIsMounted from 'react-use/lib/useMountedState';
 
-function useAudio(audioResource, settings = {}) {
-  const audioObject = useRef(null);
-  const currentAudioResource = useRef(null);
-  const nextAudioResource = useRef(null);
-  const isReadyForNextResource = useRef(true);
-  const [isLoadingAudio, setIsLoadingAudio] = useState(false);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const isMounted = useRef(false);
-  const [bugWatchdogCounter, setBugWatchdogCounter] = useState(0);
-  const userOnPlaybackTimeUpdate = useRef(null);
-  const userOnPlaybackStatusUpdate = useRef(null);
+export interface AudioResource {
+  uri: string;
+}
 
-  // current status of the component
-  useEffect(() => {
-    isMounted.current = true;
-    return () => {
-      isMounted.current = false;
-    };
-  }, []);
+export interface PlaybackTimeUpdateCallbackParams {
+  positionMillis: number;
+  durationMillis: number;
+  remainingMillis: number;
+}
+
+export type PlaybackStatusUpdateCallbackParams = AVPlaybackStatus;
+
+export interface Settings {
+  autoPlay: true;
+  onPlaybackTimeUpdate: (params: PlaybackTimeUpdateCallbackParams) => void;
+  onPlaybackStatusUpdate: (params: PlaybackStatusUpdateCallbackParams) => void;
+}
+
+export interface UseAudioResult {
+  isPlaying: boolean;
+  setPlaying: Dispatch<SetStateAction<boolean>>;
+  isLoadingAudio: boolean;
+  seek: (positionInMilliseconds: number) => Promise<void>;
+  unload: () => Promise<void>;
+  audioObject: Audio.Sound | null;
+  metadata: AVMetadata | null;
+  status: AVPlaybackStatus | null;
+}
+
+// check if two audio resources are the same
+function checkSameAudioResources(
+    resource1: AudioResource,
+    resource2: AudioResource
+) {
+  if (!resource1 || !resource2) {
+    return false;
+  }
+
+  const isResourcesStreaming = 'uri' in resource1 && 'uri' in resource2;
+  if (isResourcesStreaming) {
+    return resource1.uri === resource2.uri;
+  }
+
+  return resource1 === resource2;
+}
+
+function useAudio(
+    audioResource: AudioResource,
+    providedSettings: Partial<Settings> | undefined = undefined
+): UseAudioResult {
+  const {
+    autoPlay,
+    onPlaybackTimeUpdate: parentOnPlaybackTimeUpdate,
+    onPlaybackStatusUpdate: parentOnPlaybackStatusUpdate,
+  } = Object.assign(providedSettings || {}, {
+    autoPlay: false,
+  });
+  const isMounted = useIsMounted();
+
+  const [isLoadingAudio, setIsLoadingAudio] = useState<boolean>(false);
+  const [isPlaying, setIsPlaying] = useState<boolean>(false);
+  const [bugWatchdogCounter, setBugWatchdogCounter] = useState<number>(0);
+  const [metadata, setMetadata] = useState<AVMetadata | null>(null);
+  const [status, setStatus] = useState<AVPlaybackStatus | null>(null);
+
+  const audioObject = useRef<Audio.Sound | null>(null);
+  const currentAudioResource = useRef<any>(null);
+  const nextAudioResource = useRef<any>(null);
+  const isReadyForNextResource = useRef<any>(true);
 
   // the expo-av bug watchdog
   // expo-av has a few bugs that cause the audio to not play or pause when requested.
@@ -31,18 +90,6 @@ function useAudio(audioResource, settings = {}) {
 
     return () => clearInterval(timerHandler);
   }, []);
-
-  // merge user settings with default settings
-  const componentSettings = useMemo(() => {
-    const defaultSettings = {
-      autoPlay: false,
-    };
-
-    return {
-      ...defaultSettings,
-      ...settings,
-    };
-  }, [settings]);
 
   // check if the user has defined the audio resource
   const isResourceDefined = useMemo(() => {
@@ -59,20 +106,6 @@ function useAudio(audioResource, settings = {}) {
     // if the audio resource is not null nor a streaming, it is a local file
     return true;
   }, [audioResource]);
-
-  // check if two audio resources are the same
-  function checkSameAudioResources(resource1, resource2) {
-    if (!resource1 || !resource2) {
-      return false;
-    }
-
-    const isResourcesStreaming = ('uri' in resource1) && ('uri' in resource2);
-    if (isResourcesStreaming) {
-      return resource1.uri === resource2.uri;
-    }
-
-    return resource1 === resource2;
-  }
 
   // unload and free audio resources
   const unload = useCallback(async () => {
@@ -91,7 +124,7 @@ function useAudio(audioResource, settings = {}) {
     await audioObject.current.unloadAsync();
 
     // check if component is still mounted before changing a state
-    if (!isMounted.current) {
+    if (!isMounted) {
       return;
     }
 
@@ -101,7 +134,9 @@ function useAudio(audioResource, settings = {}) {
   }, []);
 
   // unload audio when unmount the component
-  useEffect(() => unload, [unload]);
+  useEffect(() => {
+    unload();
+  }, [unload]);
 
   // play/pause the audio according to isPlaying status
   useEffect(() => {
@@ -114,6 +149,11 @@ function useAudio(audioResource, settings = {}) {
 
       // safe guard to not call if in process of canceling current audio resource
       if (!isReadyForNextResource.current) {
+        return;
+      }
+
+      // Check if audio is available
+      if (!audioObject.current) {
         return;
       }
 
@@ -140,19 +180,26 @@ function useAudio(audioResource, settings = {}) {
   }, [isLoadingAudio, isPlaying, bugWatchdogCounter]);
 
   // onStatusUpdate callback
-  const onPlaybackStatusUpdate = useCallback((status) => {
-    // provides the current playback time
-    if (userOnPlaybackTimeUpdate.current) {
-      const positionMillis = status.positionMillis ?? 0;
-      const durationMillis = Number.isNaN(status.durationMillis) ? 1 : status.durationMillis ?? 1;
-      const remainingMillis = durationMillis - positionMillis;
-      userOnPlaybackTimeUpdate.current({ positionMillis, durationMillis, remainingMillis });
-    }
+  const onPlaybackStatusUpdate = useCallback(
+      (status: AVPlaybackStatus) => {
+        // provides the current playback time
+        if (parentOnPlaybackTimeUpdate && status.isLoaded) {
+          const positionMillis = status.positionMillis ?? 0;
+          const durationMillis = Number.isNaN(status.durationMillis)
+              ? 1
+              : status.durationMillis ?? 1;
+          const remainingMillis = durationMillis - positionMillis;
+          parentOnPlaybackTimeUpdate({
+            positionMillis,
+            durationMillis,
+            remainingMillis,
+          });
+        }
 
-    if (userOnPlaybackStatusUpdate.current) {
-      userOnPlaybackStatusUpdate.current(status);
-    }
-  }, []);
+        parentOnPlaybackStatusUpdate?.(status);
+      },
+      [parentOnPlaybackTimeUpdate, parentOnPlaybackStatusUpdate]
+  );
 
   // create the audio object when the audio resource changes.
   // if an audio object already exists, stops and unload it before creating a new one.
@@ -168,13 +215,19 @@ function useAudio(audioResource, settings = {}) {
     // check if changed the audio resource.
     // this effect is triggered on many different state changes.
     // we only take action if the audio resource changed.
-    const isSameResource = checkSameAudioResources(currentAudioResource.current, audioResource);
+    const isSameResource = checkSameAudioResources(
+        currentAudioResource.current,
+        audioResource
+    );
     if (isSameResource) {
       return;
     }
 
     // put resource in queue to be loaded next.
-    const isAlreadyNext = checkSameAudioResources(nextAudioResource.current, audioResource);
+    const isAlreadyNext = checkSameAudioResources(
+        nextAudioResource.current,
+        audioResource
+    );
     if (isAlreadyNext) {
       return;
     }
@@ -190,6 +243,7 @@ function useAudio(audioResource, settings = {}) {
       try {
         // update loading status
         setIsLoadingAudio(true);
+        setStatus(null);
 
         // destroy current audio object
         await unload();
@@ -202,20 +256,26 @@ function useAudio(audioResource, settings = {}) {
         const initialStatus = {};
         const downloadFirst = true;
         sound.setOnPlaybackStatusUpdate(onPlaybackStatusUpdate);
-        await sound.loadAsync(nextAudioResource.current, initialStatus, downloadFirst);
+        sound.setOnMetadataUpdate(setMetadata);
+        await sound.loadAsync(
+            nextAudioResource.current,
+            initialStatus,
+            downloadFirst
+        );
+        setStatus(await sound.getStatusAsync());
 
         // always check if the component is still mounted on async operations
-        if (!isMounted.current) {
+        if (!isMounted) {
           return;
         }
 
         // if the user wants to play the audio automatically, play it
-        if (componentSettings.autoPlay) {
+        if (autoPlay) {
           setIsPlaying(true);
         }
       } finally {
         // always check if the component is still mounted on async operations
-        if (!isMounted.current) {
+        if (!isMounted) {
           return;
         }
 
@@ -253,7 +313,7 @@ function useAudio(audioResource, settings = {}) {
     createAudioObjectFromQueue();
   }, [
     audioResource,
-    componentSettings.autoPlay,
+    autoPlay,
     isLoadingAudio,
     isResourceDefined,
     onPlaybackStatusUpdate,
@@ -261,39 +321,23 @@ function useAudio(audioResource, settings = {}) {
   ]);
 
   // change the audio position
-  const seek = useCallback(async (positionMs) => {
+  const seek = useCallback(async (positionMs: number) => {
+    if (!audioObject.current) {
+      return;
+    }
+
     await audioObject.current.setPositionAsync(positionMs);
   }, []);
 
-  // pause the audio
-  const pause = useCallback(() => {
-    setIsPlaying(false);
-  }, []);
-
-  // play the audio
-  const play = useCallback(() => {
-    setIsPlaying(true);
-  }, []);
-
-  // callbacks
-  const setOnPlaybackTimeUpdate = useCallback((callback) => {
-    userOnPlaybackTimeUpdate.current = callback;
-  }, []);
-
-  const setOnPlaybackStatusUpdate = useCallback((callback) => {
-    userOnPlaybackStatusUpdate.current = callback;
-  }, []);
-
   return {
-    play,
-    pause,
     seek,
     unload,
     isPlaying,
-    setIsPlaying,
     isLoadingAudio,
-    setOnPlaybackStatusUpdate,
-    setOnPlaybackTimeUpdate,
+    metadata,
+    status,
+    audioObject: audioObject.current,
+    setPlaying: setIsPlaying,
   };
 }
 
